@@ -71,7 +71,7 @@ if uploaded_model is not None and uploaded_image is not None:
             # Mengambil target size otomatis dari model TFLite [batch, height, width, channels]
             input_shape = input_details[0]['shape']
             target_size = (input_shape[1], input_shape[2])
-            st.success(f"✅ Model TFLite berhasil dimuat (Ukuran Input: {target_size[0]}x{target_size[1]})")
+            st.success(f"✅ Model TFLite berhasil dimuat")
 
         # 2. Pemrosesan Gambar
         img = Image.open(uploaded_image).convert("RGB")
