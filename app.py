@@ -12,94 +12,120 @@ st.set_page_config(
 )
 
 st.title("🍎 Klasifikasi Buah (Apple vs Mango)")
-st.write("Upload model dan gambar untuk melakukan klasifikasi buah.")
+st.write("Upload model (.keras / .tflite) dan gambar untuk melakukan klasifikasi buah.")
 
 # Threshold untuk menolak gambar yang tidak dikenali
 THRESHOLD = 0.80
+class_names = ["apple", "mango"]
 
-@st.cache_resource
-def load_model(model_path):
-    return tf.keras.models.load_model(model_path)
-
-# ==========================
-# Upload Model
-# ==========================
+# ==========================================
+# TAMPILAN AWAL: INPUT MODEL & GAMBAR
+# ==========================================
 st.subheader("1️⃣ Upload Model")
-
 uploaded_model = st.file_uploader(
-    "Pilih file model (.keras)",
-    type=["keras"]
+    "Pilih file model (.keras atau .tflite)",
+    type=["keras", "tflite"]
 )
 
-if uploaded_model is not None:
+st.subheader("2️⃣ Upload Gambar Uji")
+uploaded_image = st.file_uploader(
+    "Pilih gambar buah (.jpg/.jpeg/.png)",
+    type=["jpg", "jpeg", "png"]
+)
 
-    temp_model_path = "model_buah.keras"
-
+# ==========================================
+# LOGIKA PROSES (Berjalan jika kedua file ada)
+# ==========================================
+if uploaded_model is not None and uploaded_image is not None:
+    
+    # 1. Simpan sementara & Deteksi tipe model
+    file_extension = os.path.splitext(uploaded_model.name)[1].lower()
+    temp_model_path = f"temp_model{file_extension}"
+    
     with open(temp_model_path, "wb") as f:
         f.write(uploaded_model.getbuffer())
-
+        
     try:
-        model = load_model(temp_model_path)
+        # Tentukan target size default
+        target_size = (227, 227)
+        model_type = ""
 
-        st.success("✅ Model berhasil dimuat")
+        # Load sesuai tipe model
+        if file_extension == ".keras":
+            model = tf.keras.models.load_model(temp_model_path)
+            model_type = "keras"
+            st.success("✅ Model Keras berhasil dimuat")
+            
+        elif file_extension == ".tflite":
+            interpreter = tf.lite.Interpreter(model_path=temp_model_path)
+            interpreter.allocate_tensors()
+            input_details = interpreter.get_input_details()
+            output_details = interpreter.get_output_details()
+            model_type = "tflite"
+            
+            # Mengambil target size otomatis dari model TFLite [batch, height, width, channels]
+            input_shape = input_details[0]['shape']
+            target_size = (input_shape[1], input_shape[2])
+            st.success(f"✅ Model TFLite berhasil dimuat (Ukuran Input: {target_size[0]}x{target_size[1]})")
 
-        # ==========================
-        # Upload Gambar Uji
-        # ==========================
-        st.subheader("2️⃣ Upload Gambar Uji")
-
-        uploaded_image = st.file_uploader(
-            "Pilih gambar buah (.jpg/.jpeg/.png)",
-            type=["jpg", "jpeg", "png"]
+        # 2. Pemrosesan Gambar
+        img = Image.open(uploaded_image).convert("RGB")
+        st.image(
+            img,
+            caption="Gambar Uji",
+            use_container_width=True
         )
 
-        if uploaded_image is not None:
+        # Resize gambar sesuai kebutuhan model
+        img_resized = img.resize(target_size)
+        img_array = image.img_to_array(img_resized)
+        img_array = np.expand_dims(img_array, axis=0)
 
-            img = Image.open(uploaded_image).convert("RGB")
-
-            st.image(
-                img,
-                caption="Gambar Uji",
-                use_container_width=True
-            )
-
-            # Ubah ukuran sesuai model
-            img_resized = img.resize((227, 227))
-
-            img_array = image.img_to_array(img_resized)
-            img_array = np.expand_dims(img_array, axis=0)
-
-            # Prediksi
+        # 3. Proses Prediksi
+        if model_type == "keras":
             hasil = model.predict(img_array, verbose=0)
+            
+        elif model_type == "tflite":
+            # Sesuaikan tipe data dengan input TFLite (biasanya float32)
+            if input_details[0]['dtype'] == np.float32:
+                img_array = img_array.astype(np.float32)
+                # Catatan: Jika model TFLite Anda membutuhkan normalisasi /255.0, 
+                # hapus tanda pagar di bawah ini:
+                # img_array = img_array / 255.0
+                
+            interpreter.set_tensor(input_details[0]['index'], img_array)
+            interpreter.invoke()
+            hasil = interpreter.get_tensor(output_details[0]['index'])
 
-            class_names = ["apple", "mango"]
+        # 4. Pasca-Proses Hasil Prediksi
+        prediksi = np.argmax(hasil)
+        confidence = np.max(hasil)
 
-            prediksi = np.argmax(hasil)
-            confidence = np.max(hasil)
+        st.subheader("📊 Hasil Prediksi")
 
-            st.subheader("📊 Hasil Prediksi")
-
-            # Jika confidence rendah
-            if confidence < THRESHOLD:
-                st.warning("⚠️ Saya tidak tahu")
-            else:
-                st.success(
-                    f"✅ Buah terdeteksi sebagai: **{class_names[prediksi].upper()}**"
-                )
-
-            st.write(
-                f"**Tingkat Keyakinan:** {confidence * 100:.2f}%"
+        if confidence < THRESHOLD:
+            st.warning("⚠️ Saya tidak tahu (Di bawah threshold keyakinan)")
+        else:
+            st.success(
+                f"✅ Buah terdeteksi sebagai: **{class_names[prediksi].upper()}**"
             )
 
-            st.subheader("Probabilitas Tiap Kelas")
+        st.write(
+            f"**Tingkat Keyakinan:** {confidence * 100:.2f}%"
+        )
 
-            for i, nama in enumerate(class_names):
-                st.write(
-                    f"**{nama.capitalize()}:** {hasil[0][i] * 100:.2f}%"
-                )
+        st.subheader("Probabilitas Tiap Kelas")
+        for i, nama in enumerate(class_names):
+            st.write(
+                f"**{nama.capitalize()}:** {hasil[0][i] * 100:.2f}%"
+            )
 
     except Exception as e:
-        st.error(f"Gagal memuat model: {e}")
+        st.error(f"Terjadi kesalahan saat memproses model atau gambar: {e}")
 
 else:
-    st.info("Silakan upload file model .keras terlebih dahulu.")
+    # Berikan panduan informasi di awal jika user belum upload salah satu / keduanya
+    if uploaded_model is None:
+        st.info("💡 Silakan upload file model (.keras atau .tflite) pada kolom pertama.")
+    if uploaded_image is None:
+        st.info("💡 Silakan upload gambar uji (.jpg/.png) pada kolom kedua.")
