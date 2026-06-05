@@ -12,7 +12,7 @@ st.set_page_config(
 )
 
 st.title("🍎 Klasifikasi Buah (Apple vs Mango)")
-st.write("Upload model (.keras / .tflite) dan gambar untuk melakukan klasifikasi buah.")
+st.write("Upload model (.tflite) dan gambar untuk melakukan klasifikasi buah.")
 
 # Threshold untuk menolak gambar yang tidak dikenali
 THRESHOLD = 0.80
