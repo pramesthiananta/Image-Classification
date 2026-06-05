@@ -18,6 +18,11 @@ st.write("Upload model (.keras / .tflite) dan gambar untuk melakukan klasifikasi
 THRESHOLD = 0.80
 class_names = ["apple", "mango"]
 
+@st.cache_resource
+def load_model(model_path):
+    # Ditambahkan safe_mode=False di sini
+    return tf.keras.models.load_model(model_path, safe_mode=False)
+    
 # ==========================================
 # TAMPILAN AWAL: INPUT MODEL & GAMBAR
 # ==========================================
