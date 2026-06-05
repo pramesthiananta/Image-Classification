@@ -28,8 +28,8 @@ def load_model(model_path):
 # ==========================================
 st.subheader("1️⃣ Upload Model")
 uploaded_model = st.file_uploader(
-    "Pilih file model (.keras atau .tflite)",
-    type=["keras", "tflite"]
+    "Pilih file model (.tflite)",
+    type=["tflite"]
 )
 
 st.subheader("2️⃣ Upload Gambar Uji")
